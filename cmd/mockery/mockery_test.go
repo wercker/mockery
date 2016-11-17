@@ -3,8 +3,9 @@ package main
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"strings"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func configFromCommandLine(str string) Config {

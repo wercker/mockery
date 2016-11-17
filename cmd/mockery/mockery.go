@@ -7,9 +7,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/vektra/mockery/mockery"
 	"runtime/pprof"
 	"syscall"
+
+	"github.com/wercker/tracery/mockery"
+	"github.com/wercker/tracery/tracery"
 )
 
 const regexMetadataChars = "\\.+*?()|[]{}^$"
@@ -80,11 +82,11 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	var osp mockery.OutputStreamProvider
+	var osp tracery.OutputStreamProvider
 	if config.fPrint {
-		osp = &mockery.StdoutStreamProvider{}
+		osp = &tracery.StdoutStreamProvider{}
 	} else {
-		osp = &mockery.FileOutputStreamProvider{
+		osp = &tracery.FileOutputStreamProvider{
 			BaseDir:   config.fOutput,
 			InPackage: config.fIP,
 			TestOnly:  config.fTO,
@@ -92,14 +94,14 @@ func main() {
 		}
 	}
 
-	visitor := &mockery.GeneratorVisitor{
+	visitor := &tracery.GeneratorVisitor{
 		InPackage:   config.fIP,
 		Note:        config.fNote,
 		Osp:         osp,
 		PackageName: config.fOutpkg,
 	}
 
-	walker := mockery.Walker{
+	walker := tracery.Walker{
 		BaseDir:   config.fDir,
 		Recursive: recursive,
 		Filter:    filter,

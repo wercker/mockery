@@ -1,4 +1,4 @@
-package mockery
+package tracery
 
 import (
 	"testing"
