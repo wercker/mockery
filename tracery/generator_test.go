@@ -219,7 +219,7 @@ func (s *GeneratorSuite) TestGeneratorPrologue() {
 	expected := `package mocks
 
 import mock "github.com/stretchr/testify/mock"
-import test "github.com/vektra/mockery/mockery/fixtures"
+import test "github.com/wercker/tracery/tracery/fixtures"
 
 `
 	s.checkPrologueGeneration(generator, expected)
@@ -231,7 +231,7 @@ func (s *GeneratorSuite) TestGeneratorPrologueWithImports() {
 
 import http "net/http"
 import mock "github.com/stretchr/testify/mock"
-import test "github.com/vektra/mockery/mockery/fixtures"
+import test "github.com/wercker/tracery/tracery/fixtures"
 
 `
 	s.checkPrologueGeneration(generator, expected)
@@ -242,10 +242,10 @@ func (s *GeneratorSuite) TestGeneratorPrologueWithMultipleImportsSameName() {
 
 	expected := `package mocks
 
-import fixtureshttp "github.com/vektra/mockery/mockery/fixtures/http"
+import fixtureshttp "github.com/wercker/tracery/tracery/fixtures/http"
 import http "net/http"
 import mock "github.com/stretchr/testify/mock"
-import test "github.com/vektra/mockery/mockery/fixtures"
+import test "github.com/wercker/tracery/tracery/fixtures"
 
 `
 	s.checkPrologueGeneration(generator, expected)
@@ -1020,7 +1020,7 @@ func (s *GeneratorSuite) TestPrologueWithImportSameAsLocalPackage() {
 
 import fixtures "` + s.getInterfaceRelPath(generator.iface) + `"
 import mock "github.com/stretchr/testify/mock"
-import test "github.com/vektra/mockery/mockery/fixtures/test"
+import test "github.com/wercker/tracery/tracery/fixtures/test"
 
 `
 
@@ -1033,10 +1033,10 @@ func (s *GeneratorSuite) TestPrologueWithImportFromNestedInterface() {
 	)
 	expected := `package mocks
 
-import fixtureshttp "github.com/vektra/mockery/mockery/fixtures/http"
+import fixtureshttp "github.com/wercker/tracery/tracery/fixtures/http"
 import http "net/http"
 import mock "github.com/stretchr/testify/mock"
-import test "github.com/vektra/mockery/mockery/fixtures"
+import test "github.com/wercker/tracery/tracery/fixtures"
 
 `
 

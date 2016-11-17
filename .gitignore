@@ -1,2 +1,4 @@
 mocks
 mockery.prof
+/vendor/*/
+/cmd/tracery/tracery

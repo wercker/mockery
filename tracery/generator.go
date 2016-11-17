@@ -507,6 +507,15 @@ func (g *Generator) Generate() error {
 				strings.Join(params.Names, ", "),
 			)
 		}
+		// raw_plist := strings.Join(params.Names, ", ")
+		// space_plist := raw_plist
+		// if space_plist != "" {
+		//   space_plist = " " + space_plist
+		// }
+		// g.printf(
+		//   "// %s provides a mock function with given fields:%s\n", fname,
+		//   space_plist,
+		// )
 		g.printf(
 			"func (_m *%s) %s(%s) ", g.mockName(), fname,
 			strings.Join(params.Params, ", "),
