@@ -48,7 +48,7 @@ type Generator struct {
 	packagePathToName    map[string]string
 	nameToPackagePath    map[string]string
 	packageRoots         []string
-	tmpl                 StatelyDoings
+	tmpl                 TemplateData
 }
 
 // NewGenerator builds a Generator.
@@ -76,7 +76,7 @@ func NewGenerator(iface *Interface, pkg string, inPackage bool) *Generator {
 	return g
 }
 
-func (g *Generator) Vars() *StatelyDoings {
+func (g *Generator) Vars() *TemplateData {
 	return &g.tmpl
 }
 
@@ -254,7 +254,7 @@ func (g *Generator) generateImports() {
 			continue
 		}
 		g.printf("import %s \"%s\"\n", name, path)
-		g.tmpl.Imports = append(g.tmpl.Imports, FineChina{Name: name, Path: path})
+		g.tmpl.Imports = append(g.tmpl.Imports, TemplatePackage{Name: name, Path: path})
 		fmt.Fprintf(os.Stderr, "imports %v\n", g.tmpl.Imports)
 	}
 }
@@ -539,7 +539,7 @@ func (g *Generator) Generate() error {
 			strings.Join(params.Params, ", "),
 		)
 
-		ftmpl := FunkyChicken{
+		ftmpl := TemplateFunction{
 			WrapperName:  g.tmpl.WrapperName,
 			WrappedName:  g.tmpl.WrappedName,
 			FunctionName: fname,

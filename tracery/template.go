@@ -6,20 +6,20 @@ import (
 	"text/template"
 )
 
-type StatelyDoings struct {
+type TemplateData struct {
 	PkgName     string
 	WrappedName string
 	WrapperName string
-	Methods     []FunkyChicken
-	Imports     []FineChina
+	Methods     []TemplateFunction
+	Imports     []TemplatePackage
 }
 
-type FineChina struct {
+type TemplatePackage struct {
 	Name string
 	Path string
 }
 
-type FunkyChicken struct {
+type TemplateFunction struct {
 	WrappedName  string
 	WrapperName  string
 	FunctionName string
