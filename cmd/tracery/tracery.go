@@ -6,6 +6,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"text/template"
 
 	"runtime/pprof"
 	"syscall"
@@ -18,6 +19,7 @@ const regexMetadataChars = "\\.+*?()|[]{}^$"
 
 type Config struct {
 	fName      string
+	fTemplate  string
 	fPrint     bool
 	fOutput    string
 	fOutpkg    string
@@ -94,11 +96,14 @@ func main() {
 		}
 	}
 
+	tmpl := template.Must(tracery.GetTemplate(config.fTemplate))
+
 	visitor := &tracery.GeneratorVisitor{
 		InPackage:   config.fIP,
 		Note:        config.fNote,
 		Osp:         osp,
 		PackageName: config.fOutpkg,
+		Template:    tmpl,
 	}
 
 	walker := tracery.Walker{
@@ -122,6 +127,7 @@ func parseConfigFromArgs(args []string) Config {
 	flagSet := flag.NewFlagSet(args[0], flag.ExitOnError)
 
 	flagSet.StringVar(&config.fName, "name", "", "name or matching regular expression of interface to generate mock for")
+	flagSet.StringVar(&config.fTemplate, "tmpl", "template.go", "which template to use")
 	flagSet.BoolVar(&config.fPrint, "print", false, "print the generated mock to stdout")
 	flagSet.StringVar(&config.fOutput, "output", "./mocks", "directory to write mocks to")
 	flagSet.StringVar(&config.fOutpkg, "outpkg", "mocks", "name of generated package")

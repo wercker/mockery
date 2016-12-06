@@ -47,8 +47,8 @@ type Generator struct {
 	localizationCache    map[string]string
 	packagePathToName    map[string]string
 	nameToPackagePath    map[string]string
-
-	packageRoots []string
+	packageRoots         []string
+	tmpl                 StatelyDoings
 }
 
 // NewGenerator builds a Generator.
@@ -70,8 +70,14 @@ func NewGenerator(iface *Interface, pkg string, inPackage bool) *Generator {
 		packageRoots:      roots,
 	}
 
-	g.addPackageImportWithName("github.com/stretchr/testify/mock", "mock")
+	// g.addPackageImportWithName("github.com/stretchr/testify/mock", "mock")
+	// g.addPackageImportWithName("github.com/stretchr/testify/mock", "mock")
+	// g.addPackageImportWithName("lala.gcom", "fmt")
 	return g
+}
+
+func (g *Generator) Vars() *StatelyDoings {
+	return &g.tmpl
 }
 
 func (g *Generator) populateImports() {
@@ -248,6 +254,8 @@ func (g *Generator) generateImports() {
 			continue
 		}
 		g.printf("import %s \"%s\"\n", name, path)
+		g.tmpl.Imports = append(g.tmpl.Imports, FineChina{Name: name, Path: path})
+		fmt.Fprintf(os.Stderr, "imports %v\n", g.tmpl.Imports)
 	}
 }
 
@@ -256,8 +264,10 @@ func (g *Generator) GeneratePrologue(pkg string) {
 	g.populateImports()
 	if g.ip {
 		g.printf("package %s\n\n", g.iface.Pkg.Name())
+		g.tmpl.PkgName = g.iface.Pkg.Name()
 	} else {
 		g.printf("package %v\n\n", pkg)
+		g.tmpl.PkgName = pkg
 	}
 
 	g.generateImports()
@@ -486,6 +496,9 @@ func (g *Generator) Generate() error {
 		g.iface.Name,
 	)
 
+	g.tmpl.WrapperName = g.mockName()
+	g.tmpl.WrappedName = g.iface.Name
+
 	g.printf(
 		"type %s struct {\n\tmock.Mock\n}\n\n", g.mockName(),
 	)
@@ -516,18 +529,32 @@ func (g *Generator) Generate() error {
 		//   "// %s provides a mock function with given fields:%s\n", fname,
 		//   space_plist,
 		// )
+
+		// g.printf(
+		//   "// %s provides a mock function with given fields:%s\n", fname,
+		//   space_plist,
+		// )
 		g.printf(
 			"func (_m *%s) %s(%s) ", g.mockName(), fname,
 			strings.Join(params.Params, ", "),
 		)
+
+		ftmpl := FunkyChicken{
+			WrapperName:  g.tmpl.WrapperName,
+			WrappedName:  g.tmpl.WrappedName,
+			FunctionName: fname,
+			SigParams:    strings.Join(params.Params, ", "),
+		}
 
 		switch len(returns.Types) {
 		case 0:
 			g.printf("{\n")
 		case 1:
 			g.printf("%s {\n", returns.Types[0])
+			ftmpl.SigReturn = returns.Types[0]
 		default:
 			g.printf("(%s) {\n", strings.Join(returns.Types, ", "))
+			ftmpl.SigReturn = fmt.Sprintf("(%s)", strings.Join(returns.Types, ", "))
 		}
 
 		var formattedParamNames string
@@ -545,6 +572,8 @@ func (g *Generator) Generate() error {
 		}
 
 		called := g.generateCalled(params, formattedParamNames) // _m.Called invocation string
+		ftmpl.Params = strings.Join(params.Names, ", ")
+		ftmpl.CallParams = formatParamNames()
 
 		if len(returns.Types) > 0 {
 			g.printf("\tret := %s\n\n", called)
@@ -572,11 +601,13 @@ func (g *Generator) Generate() error {
 
 				ret = append(ret, fmt.Sprintf("r%d", idx))
 			}
-
+			ftmpl.Return = strings.Join(ret, ", ")
 			g.printf("\treturn %s\n", strings.Join(ret, ", "))
 		} else {
 			g.printf("\t%s\n", called)
 		}
+
+		g.tmpl.Methods = append(g.tmpl.Methods, ftmpl)
 
 		g.printf("}\n")
 	}

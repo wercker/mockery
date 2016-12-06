@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 )
 
 type Walker struct {
@@ -92,6 +93,7 @@ type GeneratorVisitor struct {
 	Osp       OutputStreamProvider
 	// The name of the output package, if InPackage is false (defaults to "mocks")
 	PackageName string
+	Template    *template.Template
 }
 
 func (this *GeneratorVisitor) VisitWalk(iface *Interface) error {
@@ -127,6 +129,16 @@ func (this *GeneratorVisitor) VisitWalk(iface *Interface) error {
 		return err
 	}
 
+<<<<<<< HEAD
+=======
+	gen.GenerateInterfaceAssertion()
+
+	err = this.Template.Execute(out, gen.Vars())
+	if err != nil {
+		return err
+	}
+
+>>>>>>> 5e30292... working template-based system
 	err = gen.Write(out)
 	if err != nil {
 		return err
