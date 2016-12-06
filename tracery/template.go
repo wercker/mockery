@@ -7,11 +7,12 @@ import (
 )
 
 type TemplateData struct {
-	PkgName     string
-	WrappedName string
-	WrapperName string
-	Methods     []TemplateFunction
-	Imports     []TemplatePackage
+	PkgName         string
+	WrappedName     string
+	WrappedFullName string // includes package
+	WrapperName     string
+	Methods         []TemplateFunction
+	Imports         []TemplatePackage
 }
 
 type TemplatePackage struct {
@@ -50,7 +51,8 @@ var replacements [][]string = [][]string{
 	[]string{"package main", "package {{.PkgName}}"},
 	[]string{`import "github.com/wercker/tracery/tracery"`, importTmpl},
 	[]string{"TracingTraceme", "{{.WrapperName}}"},
-	[]string{"tracery.Traceme", "{{.WrappedName}}"},
+	[]string{"tracery.Traceme", "{{.WrappedFullName}}"},
+	[]string{"Traceme", "{{.WrappedName}}"},
 	[]string{"GetObj(", "{{.FunctionName}}("},
 	[]string{"methodInput tracery.GetObjInput", "{{.SigParams}}"},
 	[]string{"tracery.GetObjOutput", "{{.SigReturn}}"},

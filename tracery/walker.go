@@ -129,8 +129,6 @@ func (this *GeneratorVisitor) VisitWalk(iface *Interface) error {
 		return err
 	}
 
-<<<<<<< HEAD
-=======
 	gen.GenerateInterfaceAssertion()
 
 	err = this.Template.Execute(out, gen.Vars())
@@ -138,10 +136,9 @@ func (this *GeneratorVisitor) VisitWalk(iface *Interface) error {
 		return err
 	}
 
->>>>>>> 5e30292... working template-based system
-	err = gen.Write(out)
-	if err != nil {
-		return err
-	}
+	// err = gen.Write(out)
+	// if err != nil {
+	//   return err
+	// }
 	return nil
 }
