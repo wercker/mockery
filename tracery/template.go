@@ -54,6 +54,8 @@ var replacements [][]string = [][]string{
 	[]string{"tracery.Traceme", "{{.WrappedFullName}}"},
 	[]string{"Traceme", "{{.WrappedName}}"},
 	[]string{"GetObj(", "{{.FunctionName}}("},
+	[]string{"GetObj\"", "{{.FunctionName}}\""},
+	[]string{"// GetObj", "// {{.FunctionName}}"},
 	[]string{"methodInput tracery.GetObjInput", "{{.SigParams}}"},
 	[]string{"tracery.GetObjOutput", "{{.SigReturn}}"},
 	[]string{"(methodInput)", "({{.CallParams}})"},
