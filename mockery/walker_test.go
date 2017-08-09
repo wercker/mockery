@@ -2,7 +2,6 @@ package mockery
 
 import (
 	"os"
-	"path"
 	"regexp"
 	"testing"
 
@@ -25,6 +24,10 @@ func NewGatheringVisitor() *GatheringVisitor {
 }
 
 func TestWalkerHere(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping recursive walker test")
+	}
+
 	wd, err := os.Getwd()
 	assert.NoError(t, err)
 	w := Walker{
@@ -41,10 +44,14 @@ func TestWalkerHere(t *testing.T) {
 	assert.True(t, len(gv.Interfaces) > 10)
 	first := gv.Interfaces[0]
 	assert.Equal(t, "AsyncProducer", first.Name)
-	assert.Equal(t, path.Join(wd, "fixtures/async.go"), first.Path)
+	assert.Equal(t, getFixturePath("async.go"), first.Path)
 }
 
 func TestWalkerRegexp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping recursive walker test")
+	}
+
 	wd, err := os.Getwd()
 	assert.NoError(t, err)
 	w := Walker{
@@ -61,5 +68,5 @@ func TestWalkerRegexp(t *testing.T) {
 	assert.True(t, len(gv.Interfaces) >= 1)
 	first := gv.Interfaces[0]
 	assert.Equal(t, "AsyncProducer", first.Name)
-	assert.Equal(t, path.Join(wd, "fixtures/async.go"), first.Path)
+	assert.Equal(t, getFixturePath("async.go"), first.Path)
 }

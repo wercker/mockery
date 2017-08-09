@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/vektra/mockery/mockery"
+	"runtime/pprof"
+	"syscall"
 )
 
 const regexMetadataChars = "\\.+*?()|[]{}^$"
@@ -24,6 +26,9 @@ type Config struct {
 	fTO        bool
 	fCase      string
 	fNote      string
+	fProfile   string
+	fVersion   bool
+	quiet      bool
 }
 
 func main() {
@@ -34,7 +39,15 @@ func main() {
 	var err error
 	var limitOne bool
 
-	if config.fName != "" && config.fAll {
+	if config.quiet {
+		// if "quiet" flag is set, set os.Stdout to /dev/null to suppress all output to Stdout
+		os.Stdout = os.NewFile(uintptr(syscall.Stdout), os.DevNull)
+	}
+
+	if config.fVersion {
+		fmt.Println(mockery.SemVer)
+		return
+	} else if config.fName != "" && config.fAll {
 		fmt.Fprintln(os.Stderr, "Specify -name or -all, but not both")
 		os.Exit(1)
 	} else if config.fName != "" {
@@ -54,6 +67,17 @@ func main() {
 	} else {
 		fmt.Fprintln(os.Stderr, "Use -name to specify the name of the interface or -all for all interfaces found")
 		os.Exit(1)
+	}
+
+	if config.fProfile != "" {
+		f, err := os.Create(config.fProfile)
+		if err != nil {
+			os.Exit(1)
+			return
+		}
+
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	var osp mockery.OutputStreamProvider
@@ -81,6 +105,7 @@ func main() {
 		Filter:    filter,
 		LimitOne:  limitOne,
 	}
+
 	generated := walker.Walk(visitor)
 
 	if config.fName != "" && !generated {
@@ -105,6 +130,9 @@ func parseConfigFromArgs(args []string) Config {
 	flagSet.BoolVar(&config.fTO, "testonly", false, "generate a mock in a _test.go file")
 	flagSet.StringVar(&config.fCase, "case", "camel", "name the mocked file using casing convention")
 	flagSet.StringVar(&config.fNote, "note", "", "comment to insert into prologue of each generated file")
+	flagSet.StringVar(&config.fProfile, "cpuprofile", "", "write cpu profile to file")
+	flagSet.BoolVar(&config.fVersion, "version", false, "prints the installed version of mockery")
+	flagSet.BoolVar(&config.quiet, "quiet", false, "suppress output to stdout")
 
 	flagSet.Parse(args[1:])
 

@@ -2,29 +2,67 @@ package mockery
 
 import (
 	"go/ast"
+	"go/build"
 	"go/importer"
 	"go/types"
 	"io/ioutil"
 	"path/filepath"
+	"strings"
+
+	"sort"
+	"sync"
 
 	"golang.org/x/tools/go/loader"
 )
 
 type Parser struct {
-	file           *ast.File
-	path           string
-	nameToASTFiles map[string][]*ast.File
-	parserPackages []*types.Package
+	configMapping    map[string][]*ast.File
+	pathToInterfaces map[string][]string
+	pathToASTFile    map[string]*ast.File
+	parserPackages   []*types.Package
+	conf             loader.Config
 }
 
 func NewParser() *Parser {
+	var conf loader.Config
+
+	conf.TypeCheckFuncBodies = func(_ string) bool { return false }
+	conf.TypeChecker.DisableUnusedImportCheck = true
+	conf.TypeChecker.Importer = importer.Default()
+
+	// Initialize the build context (e.g. GOARCH/GOOS fields) so we can use it for respecting
+	// build tags during Parse.
+	defaultBuildCtx := build.Default
+	conf.Build = &defaultBuildCtx
+
 	return &Parser{
-		parserPackages: make([]*types.Package, 0),
-		nameToASTFiles: make(map[string][]*ast.File),
+		parserPackages:   make([]*types.Package, 0),
+		configMapping:    make(map[string][]*ast.File),
+		pathToInterfaces: make(map[string][]string),
+		pathToASTFile:    make(map[string]*ast.File),
+		conf:             conf,
 	}
 }
 
 func (p *Parser) Parse(path string) error {
+
+	// To support relative paths to mock targets w/ vendor deps, we need to provide eventual
+	// calls to build.Context.Import with an absolute path. It needs to be absolute because
+	// Import will only find the vendor directory if our target path for parsing is under
+	// a "root" (GOROOT or a GOPATH). Only absolute paths will pass the prefix-based validation.
+	//
+	// For example, if our parse target is "./ifaces", Import will check if any "roots" are a
+	// prefix of "ifaces" and decide to skip the vendor search.
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return err
+	}
+
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		return err
+	}
+
 	dir := filepath.Dir(path)
 
 	files, err := ioutil.ReadDir(dir)
@@ -32,43 +70,83 @@ func (p *Parser) Parse(path string) error {
 		return err
 	}
 
-	var conf loader.Config
-
-	conf.TypeCheckFuncBodies = func(_ string) bool { return false }
-	conf.TypeChecker.DisableUnusedImportCheck = true
-	conf.TypeChecker.Importer = importer.Default()
-
 	for _, fi := range files {
-		if filepath.Ext(fi.Name()) != ".go" {
+		if filepath.Ext(fi.Name()) != ".go" || strings.HasSuffix(fi.Name(), "_test.go") {
 			continue
 		}
 
-		fpath := filepath.Join(dir, fi.Name())
-		f, err := conf.ParseFile(fpath, nil)
-		if err != nil {
-			return err
+		fname := fi.Name()
+		fpath := filepath.Join(dir, fname)
+
+		// If go/build would ignore this file, e.g. based on build tags, also ignore it here.
+		//
+		// (Further coupling with go internals and x/tools may of course bear a cost eventually
+		// e.g. https://github.com/vektra/mockery/pull/117#issue-199337071, but should add
+		// worthwhile consistency in this tool's behavior in the meantime.)
+		match, matchErr := p.conf.Build.MatchFile(dir, fname)
+		if matchErr != nil {
+			return matchErr
+		}
+		if !match {
+			continue
 		}
 
-		if fi.Name() == filepath.Base(path) {
-			p.file = f
+		f, parseErr := p.conf.ParseFile(fpath, nil)
+		if parseErr != nil {
+			return parseErr
 		}
-		p.nameToASTFiles[f.Name.String()] = append(p.nameToASTFiles[f.Name.String()], f)
+
+		p.configMapping[path] = append(p.configMapping[path], f)
+		p.pathToASTFile[fpath] = f
 	}
 
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return err
+	return nil
+}
+
+type NodeVisitor struct {
+	declaredInterfaces []string
+}
+
+func NewNodeVisitor() *NodeVisitor {
+	return &NodeVisitor{
+		declaredInterfaces: make([]string, 0),
 	}
-	p.path = abs
+}
+
+func (n *NodeVisitor) DeclaredInterfaces() []string {
+	return n.declaredInterfaces
+}
+
+func (nv *NodeVisitor) Visit(node ast.Node) ast.Visitor {
+	switch n := node.(type) {
+	case *ast.TypeSpec:
+		if _, ok := n.Type.(*ast.InterfaceType); ok {
+			nv.declaredInterfaces = append(nv.declaredInterfaces, n.Name.Name)
+		}
+	}
+	return nv
+}
+
+func (p *Parser) Load() error {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		for path, fi := range p.pathToASTFile {
+			nv := NewNodeVisitor()
+			ast.Walk(nv, fi)
+			p.pathToInterfaces[path] = nv.DeclaredInterfaces()
+		}
+		wg.Done()
+	}()
 
 	// Type-check a package consisting of this file.
 	// Type information for the imported packages
 	// comes from $GOROOT/pkg/$GOOS_$GOOARCH/fmt.a.
-	for _, files := range p.nameToASTFiles {
-		conf.CreateFromFiles(abs, files...)
+	for path, files := range p.configMapping {
+		p.conf.CreateFromFiles(path, files...)
 	}
 
-	prog, err := conf.Load()
+	prog, err := p.conf.Load()
 	if err != nil {
 		return err
 	}
@@ -77,6 +155,7 @@ func (p *Parser) Parse(path string) error {
 		p.parserPackages = append(p.parserPackages, pkgInfo.Pkg)
 	}
 
+	wg.Wait()
 	return nil
 }
 
@@ -90,40 +169,19 @@ func (p *Parser) Find(name string) (*Interface, error) {
 }
 
 func (p *Parser) FindInPackage(name string, pkg *types.Package) *Interface {
-	obj := pkg.Scope().Lookup(name)
-	if obj == nil {
-		return nil
-	}
-
-	typ := obj.Type().(*types.Named)
-
-	name = typ.Obj().Name()
-
-	iface := typ.Underlying().(*types.Interface).Complete()
-
-	return &Interface{name, p.path, p.file, pkg, iface, typ}
-}
-
-/*
-func (p *Parser) FindOld(name string) (*Interface, error) {
-	for _, decl := range p.file.Decls {
-		if gen, ok := decl.(*ast.GenDecl); ok {
-			for _, spec := range gen.Specs {
-				if typespec, ok := spec.(*ast.TypeSpec); ok {
-					if typespec.Name.Name == name {
-						if iface, ok := typespec.Type.(*ast.InterfaceType); ok {
-							return &Interface{name, p.path, p.file, iface}, nil
-						} else {
-							return nil, ErrNotInterface
-						}
-					}
-				}
-			}
+	iFaces := p.pathToInterfaces[pkg.Path()]
+	for i := 0; i < len(iFaces); i++ {
+		iface := iFaces[i]
+		if iface == name {
+			list := make([]*Interface, 0)
+			file := p.pathToASTFile[pkg.Path()]
+			list = p.packageInterfaces(pkg, file, []string{name}, list)
+			return list[0]
 		}
 	}
-	return nil, nil
+
+	return nil
 }
-*/
 
 type Interface struct {
 	Name      string
@@ -134,29 +192,36 @@ type Interface struct {
 	NamedType *types.Named
 }
 
-func (p *Parser) getFileForInterfaceName(name string) *ast.File {
-	for _, astFiles := range p.nameToASTFiles {
-		for _, file := range astFiles {
-			if file.Scope.Lookup(name) != nil {
-				return file
-			}
-		}
-	}
-	return p.file
+type sortableIFaceList []*Interface
+
+func (s sortableIFaceList) Len() int {
+	return len(s)
 }
 
-func (p *Parser) Interfaces() (ifaces []*Interface) {
+func (s sortableIFaceList) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s sortableIFaceList) Less(i, j int) bool {
+	return strings.Compare(s[i].Name, s[j].Name) == -1
+}
+
+func (p *Parser) Interfaces() []*Interface {
+	ifaces := make(sortableIFaceList, 0)
 	for _, pkg := range p.parserPackages {
-		ifaces = p.packageInterfaces(pkg, ifaces)
+		path := pkg.Path()
+		declaredIfaces := p.pathToInterfaces[path]
+		astFile := p.pathToASTFile[path]
+		ifaces = p.packageInterfaces(pkg, astFile, declaredIfaces, ifaces)
 	}
-	return
+
+	sort.Sort(ifaces)
+	return ifaces
 }
 
-func (p *Parser) packageInterfaces(pkg *types.Package, ifaces []*Interface) []*Interface {
-
+func (p *Parser) packageInterfaces(pkg *types.Package, file *ast.File, declaredInterfaces []string, ifaces []*Interface) []*Interface {
 	scope := pkg.Scope()
-
-	for _, name := range scope.Names() {
+	for _, name := range declaredInterfaces {
 		obj := scope.Lookup(name)
 		if obj == nil {
 			continue
@@ -168,19 +233,25 @@ func (p *Parser) packageInterfaces(pkg *types.Package, ifaces []*Interface) []*I
 		}
 
 		name = typ.Obj().Name()
-
 		iface, ok := typ.Underlying().(*types.Interface)
 		if !ok {
 			continue
 		}
 
-		ifaces = append(
-			ifaces,
-			&Interface{
-				name, p.path, p.getFileForInterfaceName(name), pkg,
-				iface.Complete(), typ,
-			},
-		)
+		if typ.Obj().Pkg() == nil {
+			continue
+		}
+
+		elem := &Interface{
+			Name:      name,
+			Pkg:       pkg,
+			Path:      pkg.Path(),
+			Type:      iface.Complete(),
+			NamedType: typ,
+			File:      file,
+		}
+
+		ifaces = append(ifaces, elem)
 	}
 
 	return ifaces
